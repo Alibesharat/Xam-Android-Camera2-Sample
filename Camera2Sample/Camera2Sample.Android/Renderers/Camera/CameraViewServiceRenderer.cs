@@ -15,101 +15,98 @@ using Xamarin.Forms.Platform.Android;
 [assembly: ExportRenderer(typeof(CameraView), typeof(CameraViewServiceRenderer))]
 namespace Camera2Sample.Droid.Renderers.Camera
 {
-	public class CameraViewServiceRenderer : ViewRenderer<CameraView, CameraDroid>
-	{
-		private CameraDroid _camera;
-		private readonly Context _context;
+    public class CameraViewServiceRenderer : ViewRenderer<CameraView, CameraDroid>
+    {
+        private CameraDroid _camera;
+        private readonly Context _context;
 
-		public CameraViewServiceRenderer(Context context) : base(context)
-		{
-			_context = context;
-		}
+        public CameraViewServiceRenderer(Context context) : base(context)
+        {
+            _context = context;
+        }
 
 
 
-		protected override void OnElementChanged(ElementChangedEventArgs<CameraView> e)
-		{
-			base.OnElementChanged(e);
+        protected override void OnElementChanged(ElementChangedEventArgs<CameraView> e)
+        {
+            base.OnElementChanged(e);
 
-			var permissions = CameraPermissions();
-			_camera = new CameraDroid(Context);
-           
-            CameraOptions CameraOption = e.NewElement?.Camera??CameraOptions.Rear;
+            var permissions = CameraPermissions();
+            _camera = new CameraDroid(Context);
+
+            CameraOptions CameraOption = e.NewElement?.Camera ?? CameraOptions.Rear;
+            bool  TorchMode = e.NewElement?.Flash ?? false;
             if (Control == null)
-			{
-				if (permissions)
-				{
-					_camera.OpenCamera(CameraOption);
+            {
+                if (permissions)
+                {
+                    _camera.OpenCamera(CameraOption,TorchMode);
+                    SetNativeControl(_camera);
+                }
+                else
+                {
+                    MainActivity.CameraPermissionGranted += (sender, args) =>
+                    {
+                        _camera.OpenCamera(CameraOption, TorchMode);
+                        SetNativeControl(_camera);
+                    };
+                }
+            }
+            if (e.NewElement != null && _camera != null)
+            {
+                _camera.Photo += OnPhoto;
+            }
+        }
 
-					SetNativeControl(_camera);
-				}
-				else
-				{
-					MainActivity.CameraPermissionGranted += (sender, args) =>
-					{
-						_camera.OpenCamera(CameraOption);
+        private async void OnPhoto(object sender, ImageSource imgSource)
+        {
+            var imageData = await RotateImageToPortrait(imgSource);
 
-						SetNativeControl(_camera);
-					};
-				}
-			}
+            Device.BeginInvokeOnMainThread(() =>
+           {
+               MainPage.OnPhotoCaptured(imageData);
+           });
+        }
 
-			if (e.NewElement != null && _camera != null)
-			{
-				_camera.Photo += OnPhoto;
-			}
-		}
+        protected override void Dispose(bool disposing)
+        {
+            _camera.Photo -= OnPhoto;
 
-		private async void OnPhoto(object sender, ImageSource imgSource)
-		{
-			var imageData = await RotateImageToPortrait(imgSource);
+            base.Dispose(disposing);
+        }
 
-			Device.BeginInvokeOnMainThread(() =>
-		   {
-			   MainPage.OnPhotoCaptured(imageData);
-		   });
-		}
+        private bool CameraPermissions()
+        {
+            const string permission = Manifest.Permission.Camera;
 
-		protected override void Dispose(bool disposing)
-		{
-			_camera.Photo -= OnPhoto;
+            if ((int)Build.VERSION.SdkInt < 23 || ContextCompat.CheckSelfPermission(Android.App.Application.Context, permission) == Permission.Granted)
+            {
+                return true;
+            }
 
-			base.Dispose(disposing);
-		}
+            ActivityCompat.RequestPermissions((MainActivity)_context, MainActivity.CameraPermissions, MainActivity.CameraPermissionsCode);
 
-		private bool CameraPermissions()
-		{
-			const string permission = Manifest.Permission.Camera;
+            return false;
+        }
 
-			if ((int)Build.VERSION.SdkInt < 23 || ContextCompat.CheckSelfPermission(Android.App.Application.Context, permission) == Permission.Granted)
-			{
-				return true;
-			}
+        // ReSharper disable once UnusedMember.Local
+        private async Task<ImageSource> RotateImageToPortrait(ImageSource imgSource)
+        {
+            var imagesourceHandler = new StreamImagesourceHandler();
+            var photoTask = imagesourceHandler.LoadImageAsync(imgSource, _context);
 
-			ActivityCompat.RequestPermissions((MainActivity)_context, MainActivity.CameraPermissions, MainActivity.CameraPermissionsCode);
+            var photo = await photoTask;
 
-			return false;
-		}
+            var matrix = new Matrix();
 
-		// ReSharper disable once UnusedMember.Local
-		private async Task<ImageSource> RotateImageToPortrait(ImageSource imgSource)
-		{
-			var imagesourceHandler = new StreamImagesourceHandler();
-			var photoTask = imagesourceHandler.LoadImageAsync(imgSource, _context);
+            matrix.PreRotate(-90);
+            photo = Bitmap.CreateBitmap(photo, 0, 0, photo.Width, photo.Height, matrix, false);
+            matrix.Dispose();
 
-			var photo = await photoTask;
-
-			var matrix = new Matrix();
-
-			matrix.PreRotate(-90);
-			photo = Bitmap.CreateBitmap(photo, 0, 0, photo.Width, photo.Height, matrix, false);
-			matrix.Dispose();
-
-			var stream = new MemoryStream();
-			photo.Compress(Bitmap.CompressFormat.Jpeg, 50, stream);
-			stream.Seek(0L, SeekOrigin.Begin);
-
-			return ImageSource.FromStream(() => stream);
-		}
-	}
+            var stream = new MemoryStream();
+            photo.Compress(Bitmap.CompressFormat.Jpeg, 50, stream);
+            stream.Seek(0L, SeekOrigin.Begin);
+            return ImageSource.FromStream(() => stream);
+        }
+    }
 }

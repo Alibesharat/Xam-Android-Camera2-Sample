@@ -7,9 +7,10 @@
 		<Label Text="UNIT23 -  Xamarin Android Camera2 API" 
 		   HorizontalOptions="Center" />
 		<renderers:CameraView Camera="Front"
+                              Flash="True"
 		                      HeightRequest="400"
 		                      HorizontalOptions="FillAndExpand" />
-		<Image HeightRequest="400" x:Name="PhotoCaptured" />
+		<Image HeightRequest="400" x:Name="PhotoCaptured"  />
 		
 	</StackLayout>
 
